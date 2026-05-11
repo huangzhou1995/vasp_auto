@@ -119,8 +119,11 @@ def _prepare_step_directory(step_name: str, step_cfg: dict, work_dir: str,
 
     # Pre-step file copies
     if step_name == "scf":
+        # Try opt dir first, then work_dir (when opt skipped via --from)
         opt_dir = os.path.join(work_dir, steps_cfg["opt"].get("dir", "opt"))
         contcar = os.path.join(opt_dir, "CONTCAR")
+        if not os.path.isfile(contcar):
+            contcar = os.path.join(work_dir, "CONTCAR")
         if os.path.isfile(contcar):
             dst = os.path.join(job_dir, "POSCAR")
             if not os.path.isfile(dst) or os.path.getmtime(contcar) > os.path.getmtime(dst):
@@ -128,15 +131,18 @@ def _prepare_step_directory(step_name: str, step_cfg: dict, work_dir: str,
                 logger.info(f"Copied CONTCAR -> {dst}")
 
     elif step_name == "dos":
+        # Try scf dir first, then work_dir (when scf skipped via --from)
         scf_dir = os.path.join(work_dir, steps_cfg["scf"].get("dir", "scf"))
         chgcar = os.path.join(scf_dir, "CHGCAR")
+        if not os.path.isfile(chgcar):
+            chgcar = os.path.join(work_dir, "CHGCAR")
         if os.path.isfile(chgcar):
             dst = os.path.join(job_dir, "CHGCAR")
             if not os.path.isfile(dst) or os.path.getmtime(chgcar) > os.path.getmtime(dst):
                 shutil.copy2(chgcar, dst)
                 logger.info(f"Copied CHGCAR -> {dst}")
         else:
-            logger.warning(f"CHGCAR not found in {scf_dir}, DOS step may fail")
+            logger.warning(f"CHGCAR not found in {scf_dir} or {work_dir}, DOS step may fail")
 
     # Write INCAR
     incar_path = os.path.join(job_dir, "INCAR")

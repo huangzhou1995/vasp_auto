@@ -17,16 +17,17 @@
 cd /path/to/your/calculation
 ls POSCAR                      # 只需要 POSCAR
 
-# 2. 如果你已有 sbatch 脚本模板，直接指向它:
-#    (在 config.yaml 中设置 slurm.template: "./my_sbatch.sh")
-#    程序自动替换 job-name/output/error，注入 cd 和完成检测
+# 2. 根据集群类型选择配置文件
+#    CPU 集群 (P_96 分区, 96核):
+cp ~/software/vasp_auto/config_cpu.yaml .
+#    GPU 集群 (P100 分区, 1 GPU):
+cp ~/software/vasp_auto/config_gpu.yaml .
 
-# 3. 复制配置文件并编辑
-cp /path/to/vasp_auto/config.yaml .
-vim config.yaml                # 改 INCAR 参数（如果用模板则 Slurm 项可忽略）
+# 3. 编辑配置 (修改 INCAR 参数等)
+vim config_cpu.yaml
 
-# 4. 运行完整流程 (自动生成 POTCAR → KPOINTS → opt → scf → dos)
-python /path/to/vasp_auto/vasp_auto.py config.yaml
+# 4. 运行完整流程 (opt → scf → dos)
+python ~/software/vasp_auto/vasp_auto.py config_cpu.yaml
 ```
 
 ## 配置文件说明
@@ -98,11 +99,20 @@ postprocess:
 
 ## 使用已有 sbatch 脚本 (推荐)
 
-如果你已经有适配集群的 sbatch 脚本（module load、GPU 绑定等），直接作为模板使用，无需在 config.yaml 中重复配置 Slurm 参数：
+如果你已经有适配集群的 sbatch 脚本（module load、GPU 绑定等），直接作为模板使用，无需在 config.yaml 中重复配置 Slurm 参数。
+
+软件自带两个模板，按需选用：
+
+| 模板 | 适用集群 | 对应配置 |
+|------|----------|----------|
+| `sub.vasp-6.3.2` | CPU (P_96, 96核) | `config_cpu.yaml` |
+| `sub_vasp_gpu.sh` | GPU (P100, 1 GPU) | `config_gpu.yaml` |
 
 ```yaml
 slurm:
-  template: "./sub_vasp_gpu.sh"  # 指向你已有的 sbatch 脚本
+  template: ~/software/vasp_auto/sub_vasp_gpu.sh  # GPU 集群
+  # 或
+  template: ~/software/vasp_auto/sub.vasp-6.3.2   # CPU 集群
 ```
 
 程序会：
@@ -114,7 +124,7 @@ slurm:
 6. 在后面注入完成检测逻辑（exit code 检查 + `_DONE`/`_FAILED` 标记）
 7. 如果执行行用了 `exec`，自动去掉（否则后面的标记逻辑不会执行）
 
-**模板示例 (CPU 集群):**
+**CPU 集群模板 (P_96):**
 ```bash
 #!/bin/bash
 #SBATCH --job-name=vasp-test
@@ -129,41 +139,56 @@ module load vasp/6.3.2-vtst-sol-cp-plugins-oneapi2025
 mpirun -np $SLURM_NTASKS vasp_std
 ```
 
-**模板示例 (GPU 集群):**
+**GPU 集群模板 (P100):**
 ```bash
 #!/bin/bash
 #SBATCH --job-name "vasp"
 #SBATCH --partition P100
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=2
 #SBATCH --gpus-per-task=1
-...
-module load nvhpc/25.3
-...
-mpirun -np $MPINUM $MPIRUN_OPTIONS vasp_std
+#SBATCH --gpu-bind=closest
+
+module purge
+module load nvhpc_25.3/nvhpc/25.3
+module load mkl/2024.2
+module load vasp/6.4.2-vtst-mkl2024-nvhpc25.3
+
+mpirun -np $SLURM_NTASKS vasp_std
 ```
 
 ## 命令行用法
 
 ```bash
-# 完整工作流
-python vasp_auto.py config.yaml
+# 完整工作流 (CPU)
+python ~/software/vasp_auto/vasp_auto.py config_cpu.yaml
+
+# 完整工作流 (GPU)
+python ~/software/vasp_auto/vasp_auto.py config_gpu.yaml
+
+# 从 SCF 开始，跳过结构优化 (已有 POSCAR 时)
+vap --from scf config_cpu.yaml
+
+# 只跑 DOS (已有 CHGCAR 时)
+vap --from dos config_cpu.yaml
 
 # 只运行某一步 (opt / scf / dos)
-python vasp_auto.py --step scf config.yaml
+python ~/software/vasp_auto/vasp_auto.py --step scf config_cpu.yaml
 
 # 检查某个作业的状态
-python vasp_auto.py --check 12345
+python ~/software/vasp_auto/vasp_auto.py --check 12345
 
 # 检查作业状态 + 扫描 OUTCAR 错误
-python vasp_auto.py --check 12345 config.yaml
+python ~/software/vasp_auto/vasp_auto.py --check 12345 config_cpu.yaml
 
 # 只看 sbatch 脚本，不实际提交
-python vasp_auto.py --dry-run config.yaml
+python ~/software/vasp_auto/vasp_auto.py --dry-run config_cpu.yaml
 
 # 仅运行后处理 (vaspkit)
-python vasp_auto.py --post config.yaml
+python ~/software/vasp_auto/vasp_auto.py --post config_cpu.yaml
 
 # 调试模式 (详细日志)
-python vasp_auto.py --verbose config.yaml
+python ~/software/vasp_auto/vasp_auto.py --verbose config_cpu.yaml
 ```
 
 ## 工作流程

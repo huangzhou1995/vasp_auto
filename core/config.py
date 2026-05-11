@@ -117,6 +117,7 @@ def load_config(config_path: str) -> dict:
     Returns:
         Merged configuration dictionary.
     """
+    config_path = os.path.expanduser(config_path)
     with open(config_path, "r") as f:
         user_config = yaml.safe_load(f)
 

@@ -40,6 +40,7 @@ def _build_sbatch_script(
     """
     template_path = slurm_cfg.get("template", "").strip()
     if template_path:
+        template_path = os.path.expanduser(template_path)
         return _build_from_template(job_name, job_dir, template_path, vasp_exec)
     return _build_minimal(job_name, job_dir, slurm_cfg, vasp_exec)
 

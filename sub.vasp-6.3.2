@@ -1,0 +1,14 @@
+#!/bin/bash
+#SBATCH --job-name=vasp-test
+#SBATCH --partition=P_96
+#SBATCH --nodes=1
+#SBATCH --ntasks=96
+#SBATCH --output=%j.log
+
+module load  intel/oneapi2025.2 
+module load  vasp/6.3.2-vtst-sol-cp-plugins-oneapi2025
+
+
+
+mpirun -np $SLURM_NTASKS vasp_std
+

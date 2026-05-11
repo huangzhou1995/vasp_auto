@@ -2,10 +2,11 @@
 """vasp_auto — Automated VASP workflow via Slurm.
 
 Usage:
-    python vasp_auto.py config.yaml          # Run full workflow
-    python vasp_auto.py --step opt config.yaml  # Run single step
-    python vasp_auto.py --check JOBID        # Check job status
-    python vasp_auto.py --post config.yaml   # Post-process only
+    python vasp_auto.py config.yaml           # Full workflow
+    python vasp_auto.py --from scf config.yaml # From SCF onward
+    python vasp_auto.py --step opt config.yaml # Single step
+    python vasp_auto.py --check JOBID         # Check job status
+    python vasp_auto.py --post config.yaml    # Post-process only
     python vasp_auto.py --dry-run config.yaml # Generate scripts only
 """
 
@@ -39,6 +40,8 @@ def main():
         epilog="""
 Examples:
   python vasp_auto.py config.yaml              # Full workflow
+  python vasp_auto.py --from scf config.yaml   # From SCF through DOS
+  python vasp_auto.py --from dos config.yaml   # DOS only
   python vasp_auto.py --step opt config.yaml   # Only structure optimization
   python vasp_auto.py --step dos config.yaml   # Only DOS step
   python vasp_auto.py --check 12345            # Check job 12345 status
@@ -49,6 +52,8 @@ Examples:
     )
 
     parser.add_argument("config", nargs="?", help="Path to config YAML file")
+    parser.add_argument("--from", dest="start_from", choices=["scf", "dos"],
+                        help="Start from this step, skip earlier ones")
     parser.add_argument("--step", choices=["opt", "scf", "dos"], help="Run only a single step")
     parser.add_argument("--check", metavar="JOBID", help="Check status of a Slurm job")
     parser.add_argument("--post", action="store_true", help="Run post-processing only")
@@ -108,6 +113,17 @@ Examples:
     # Workflow mode (full or single step)
     dry_run = args.dry_run
     step = args.step
+
+    # --from: disable steps before the starting point
+    start_from = args.start_from
+    if start_from:
+        step_order = ["opt", "scf", "dos"]
+        for s in step_order:
+            if s == start_from:
+                break
+            if s in cfg.get("steps", {}):
+                cfg["steps"][s]["enabled"] = False
+                logger.info(f"Step '{s}' disabled by --from {start_from}")
 
     if dry_run:
         logger.info("DRY RUN mode — sbatch scripts will be generated but not submitted")

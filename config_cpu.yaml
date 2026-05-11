@@ -11,7 +11,7 @@
 #           job-name/output/error，注入 cd work_dir 和完成检测逻辑
 #   方式2: 不提供 template — 用下面的参数自动生成 sbatch 脚本
 slurm:
-  template: ~/software/vasp_auto/sub_vasp_gpu.sh                  # 路径到已有 sbatch 脚本模板 (空=自动生成)
+  template: ~/software/vasp_auto/sub.vasp-6.3.2
   partition: "compute"          # Slurm partition name (template 模式下忽略)
   nodes: 1                      # (template 模式下忽略)
   ntasks_per_node: 32           # CPU cores per node (template 模式下忽略)
@@ -36,7 +36,7 @@ poll_interval: 60
 #   sequential - Submit step 1, wait for it, then step 2, then step 3
 #   chain      - Submit all 3 at once with Slurm dependency chains
 #                (faster queue-wise, less monitoring)
-mode: "sequential"
+mode: "chain"
 
 # ============================================================
 # Input file auto-generation
