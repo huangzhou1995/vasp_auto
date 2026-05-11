@@ -1,0 +1,157 @@
+# ============================================================
+# vasp_auto configuration
+# ============================================================
+# Copy this file to your VASP calculation directory and edit.
+# Required input files in work_dir: POSCAR, POTCAR, KPOINTS
+# ============================================================
+
+# Slurm job settings
+# 两种使用方式:
+#   方式1: 提供 template (推荐) — 指向你已有的 sbatch 脚本，程序自动替换
+#           job-name/output/error，注入 cd work_dir 和完成检测逻辑
+#   方式2: 不提供 template — 用下面的参数自动生成 sbatch 脚本
+slurm:
+  template: ""                  # 路径到已有 sbatch 脚本模板 (空=自动生成)
+  partition: "compute"          # Slurm partition name (template 模式下忽略)
+  nodes: 1                      # (template 模式下忽略)
+  ntasks_per_node: 32           # CPU cores per node (template 模式下忽略)
+  time: "24:00:00"              # Wall time limit (template 模式下忽略)
+  job_name_prefix: "vasp"       # Prefix for job names
+  extra: ""                     # Additional SBATCH directives (template 模式下忽略)
+  # extra: |
+  #   #SBATCH --mem=64G
+  #   #SBATCH --gres=gpu:1
+
+# VASP executable
+vasp:
+  exec: "vasp_std"              # vasp_std, vasp_gam, vasp_ncl, or qvasp
+
+# Base working directory (usually current dir)
+work_dir: "./"
+
+# Polling interval for job status checks (seconds)
+poll_interval: 60
+
+# Run mode:
+#   sequential - Submit step 1, wait for it, then step 2, then step 3
+#   chain      - Submit all 3 at once with Slurm dependency chains
+#                (faster queue-wise, less monitoring)
+mode: "sequential"
+
+# ============================================================
+# Input file auto-generation
+# ============================================================
+# If POSCAR exists, POTCAR and KPOINTS can be auto-generated via vaspkit.
+# Set auto_generate: false if you already have these files.
+
+potcar:
+  auto_generate: true           # Use vaspkit 103 to build POTCAR from POSCAR
+
+kpoints:
+  auto_generate: true           # Auto-generate KPOINTS file
+  mode: "direct"                # "direct" = write mesh directly
+                                # "vaspkit" = use vaspkit task 102 (interactive)
+  scheme: "M"                   # G=Gamma-centered | M=Monkhorst-Pack
+  mesh: [0, 0, 0]              # [kx, ky, kz], [0,0,0]=auto from density
+  kpoints_density: 0.04         # K-point density (per Angstrom^-1)
+
+# ============================================================
+# Resume / retry settings
+# ============================================================
+resume:
+  skip_completed: true          # Skip steps that already have a _DONE marker
+  retry_failed: true            # Auto-retry failed steps
+  max_retries: 1                # Max retry attempts per step
+
+# ============================================================
+# Calculation steps
+# ============================================================
+steps:
+  # ---- Structure Optimization ----
+  opt:
+    enabled: true
+    job_name: "opt"
+    dir: "opt"                   # Subdirectory for this step
+    incar:
+      # --- Electronic ---
+      ENCUT: 400
+      PREC: "Normal"
+      LREAL: "Auto"
+      ISMEAR: 0
+      SIGMA: 0.05
+      # --- Ionic relaxation ---
+      ISIF: 2                    # Full relaxation (cell + ions)
+      IBRION: 2                  # Conjugate gradient
+      NSW: 500                   # Max ionic steps
+      EDIFF: 1.0e-5
+      EDIFFG: -0.02              # Force convergence (eV/A)
+      # --- Output ---
+      LWAVE: False
+      LCHARG: True
+      # --- Add any other VASP tags here ---
+      NCORE: 6
+      ISPIN: 2
+      ISTART: 0
+      IVDW: 11
+      ALGO: "Normal"
+
+      
+
+
+  # ---- Self-Consistent Field (static) ----
+  scf:
+    enabled: true
+    job_name: "scf"
+    dir: "scf"
+    incar:
+      NSW: 0                     # Static calculation
+      ICHARG: 2                  # Start from scratch (or read WAVECAR)
+      ENCUT: 400
+      PREC: "Normal"
+      LREAL: "Auto"
+      ISMEAR: 0
+      SIGMA: 0.05
+      EDIFF: 1.0e-5
+      LWAVE: False
+      LCHARG: True
+      NCORE: 6
+      ISPIN: 2
+      ISTART: 0
+      IVDW: 11
+      ALGO: "Normal"
+      LAECHG: True  
+                   # Also write AECCAR for Bader analysis
+
+  # ---- Non-Self-Consistent DOS ----
+  dos:
+    enabled: true
+    job_name: "dos"
+    dir: "dos"
+    incar:
+      NSW: 0
+      ICHARG: 11                 # Read CHGCAR, non-SCF DOS
+      ISMEAR: -5                 # Tetrahedron method for DOS
+      SIGMA: 0.05
+      ENCUT: 400
+      PREC: "Normal"
+      LREAL: "Auto"
+      LORBIT: 11                 # Atom-projected DOS
+      NEDOS: 2000                # Dense DOS grid
+      LWAVE: False
+      NCORE: 6
+      ISPIN: 2
+      ISTART: 0
+      IVDW: 11
+      ALGO: "Normal"
+      LCHARG: False
+
+# ============================================================
+# Post-processing with vaspkit
+# ============================================================
+# vaspkit task numbers to run after DOS step completes:
+#   301 = Total/partial DOS extraction
+#   211 = Band structure extraction
+# See vaspkit documentation for more task numbers.
+postprocess:
+  vaspkit_tasks: []
+  # Example: vaspkit_tasks: [301]
