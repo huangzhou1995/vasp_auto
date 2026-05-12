@@ -10,6 +10,10 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+SLURM_BIN = '/public/softwares/slurm-24/bin'
+SACCT = os.path.join(SLURM_BIN, 'sacct')
+SQUEUE = os.path.join(SLURM_BIN, 'squeue')
+
 
 class JobState(Enum):
     PENDING = "PENDING"
@@ -26,7 +30,7 @@ def _get_job_state_slurm(jobid: str) -> tuple[JobState, str]:
     Returns (JobState, message).
     """
     cmd = [
-        "sacct", "-j", jobid,
+        SACCT, "-j", jobid,
         "--format=State,ExitCode",
         "--noheader",
         "--parsable2",

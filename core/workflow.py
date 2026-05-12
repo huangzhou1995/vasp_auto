@@ -8,6 +8,7 @@ from typing import Optional
 from .config import write_incar, write_kpoints
 from .slurm import submit_job
 from .monitor import wait_for_job, JobState, check_outcar_done, check_outcar_errors
+from .postprocess import generate_kpoints_vaspkit
 from .postprocess import generate_potcar, generate_kpoints_vaspkit
 
 logger = logging.getLogger(__name__)
@@ -131,7 +132,22 @@ def _prepare_step_directory(step_name: str, step_cfg: dict, work_dir: str,
                 logger.info(f"Copied CONTCAR -> {dst}")
 
     elif step_name == "dos":
-        # Try scf dir first, then work_dir (when scf skipped via --from)
+        # Generate denser KPOINTS via vaspkit 102 (Gamma, 0.02 spacing)
+        dos_kpts = step_cfg.get("kpoints", {})
+        dos_density = dos_kpts.get("kpoints_density", 0.02)
+        logger.info(f"Generating DOS KPOINTS via vaspkit (spacing={dos_density}, Gamma)...")
+        if not generate_kpoints_vaspkit(job_dir, scheme="G", density=dos_density):
+            logger.warning("vaspkit KPOINTS generation failed, using fallback")
+            scheme_str = "Gamma"
+            kpts_path = os.path.join(job_dir, "KPOINTS")
+            with open(kpts_path, "w") as f:
+                f.write(f"K-Spacing Value: {dos_density:.3f}\n")
+                f.write("0\n")
+                f.write(f"{scheme_str}\n")
+                f.write(f"{dos_density:.6f}\n")
+            logger.info(f"Written fallback KPOINTS for DOS (K-spacing={dos_density}, {scheme_str})")
+
+        # Copy CHGCAR: try scf dir first, then work_dir
         scf_dir = os.path.join(work_dir, steps_cfg["scf"].get("dir", "scf"))
         chgcar = os.path.join(scf_dir, "CHGCAR")
         if not os.path.isfile(chgcar):
@@ -163,6 +179,7 @@ def run_step(
     dry_run: bool = False,
     retry_count: int = 0,
     max_retries: int = 1,
+    pre_exec_cmds: list[str] | None = None,
 ) -> Optional[str]:
     """Run a single VASP calculation step.
 
@@ -197,6 +214,7 @@ def run_step(
         vasp_exec=vasp_exec,
         dependency_jobid=dependency_jobid,
         dry_run=dry_run,
+        pre_exec_cmds=pre_exec_cmds,
     )
 
     if dry_run:
@@ -208,7 +226,8 @@ def run_step(
 
 
 def _wait_and_handle_failure(step_name: str, jobid: str, job_dir: str,
-                             poll_interval: int, max_retries: int) -> JobState:
+                             poll_interval: int, max_retries: int,
+                             max_wait: int | None = None) -> JobState:
     """Wait for a job and return its final state. No retry logic here —
     retry is handled at the workflow level."""
     outcar = os.path.join(job_dir, "OUTCAR")
@@ -217,6 +236,7 @@ def _wait_and_handle_failure(step_name: str, jobid: str, job_dir: str,
         jobid=jobid,
         outcar_path=outcar,
         poll_interval=poll_interval,
+        timeout=max_wait,
     )
 
     if state == JobState.COMPLETED:
@@ -307,6 +327,14 @@ def run_workflow(cfg: dict, step_filter: Optional[str] = None, dry_run: bool = F
             elif step_name == "dos" and "scf" in jobids:
                 dependency_jobid = jobids["scf"]
 
+        # ---- Pre-exec commands for chain mode DOS step ----
+        pre_exec_cmds = None
+        if step_name == "dos":
+            pre_exec_cmds = [
+                'echo "Waiting 10s for filesystem sync before DOS..."',
+                'sleep 10',
+            ]
+
         # ---- Submit and optionally wait ----
         for attempt in range(max_retries + 1):
             jobid = run_step(
@@ -320,6 +348,7 @@ def run_workflow(cfg: dict, step_filter: Optional[str] = None, dry_run: bool = F
                 dry_run=dry_run,
                 retry_count=attempt,
                 max_retries=max_retries,
+                pre_exec_cmds=pre_exec_cmds,
             )
 
             if dry_run or jobid is None:
@@ -328,8 +357,10 @@ def run_workflow(cfg: dict, step_filter: Optional[str] = None, dry_run: bool = F
             jobids[step_name] = jobid
 
             if mode == "sequential":
+                max_wait = cfg.get("max_wait", None)
                 state = _wait_and_handle_failure(
-                    step_name, jobid, job_dir, poll_interval, max_retries
+                    step_name, jobid, job_dir, poll_interval, max_retries,
+                    max_wait=max_wait,
                 )
 
                 if state == JobState.COMPLETED:

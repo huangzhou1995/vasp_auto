@@ -5,10 +5,11 @@
 #SBATCH --ntasks=96
 #SBATCH --output=%j.log
 
-module load  intel/oneapi2025.2 
-module load  vasp/6.3.2-vtst-sol-cp-plugins-oneapi2025
 
 
 
+
+source /public/softwares/intel/oneapi2025.2/setvars.sh 2>/dev/null
+export PATH=/public/softwares/slurm-24/bin:$PATH
+export PATH=/public/softwares/vasp.6.3.2-vtst-sol-cp-plugins-oneapi2025/bin:$PATH
 mpirun -np $SLURM_NTASKS vasp_std
-

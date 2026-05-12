@@ -58,6 +58,7 @@ Examples:
     parser.add_argument("--check", metavar="JOBID", help="Check status of a Slurm job")
     parser.add_argument("--post", action="store_true", help="Run post-processing only")
     parser.add_argument("--dry-run", action="store_true", help="Generate sbatch scripts without submitting")
+    parser.add_argument("--detach", "-d", action="store_true", help="Run in background (nohup), auto-submit next steps")
     parser.add_argument("--verbose", "-v", action="store_true", help="Verbose logging")
 
     args = parser.parse_args()
@@ -124,6 +125,17 @@ Examples:
             if s in cfg.get("steps", {}):
                 cfg["steps"][s]["enabled"] = False
                 logger.info(f"Step '{s}' disabled by --from {start_from}")
+
+    # --detach: run in background via nohup
+    if args.detach:
+        import subprocess as sp
+        logfile = os.path.join(os.getcwd(), "vasp_auto.log")
+        cmd = [sys.executable] + [a for a in sys.argv if a != "--detach" and a != "-d"]
+        with open(logfile, "a") as f:
+            proc = sp.Popen(cmd, stdout=f, stderr=f, close_fds=True,
+                            start_new_session=True)
+        logger.info(f"Detached background process (PID={proc.pid}), log: {logfile}")
+        return
 
     if dry_run:
         logger.info("DRY RUN mode — sbatch scripts will be generated but not submitted")

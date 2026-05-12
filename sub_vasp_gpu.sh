@@ -2,18 +2,18 @@
 #SBATCH --job-name "vasp"
 #SBATCH --partition P100
 #SBATCH --comment=""
-### Node settings
 #SBATCH --ntasks=1
-### CPU  settings
 #SBATCH --cpus-per-task=2
 #SBATCH --threads-per-core=1
-### GPU  setting
 #SBATCH --gpus-per-task=1
 #SBATCH --gpu-bind=closest
 #SBATCH  --gres-flags=enforce-binding
 #SBATCH --gpu-bind=closest
 #SBATCH --hint=nomultithread
 #SBATCH --export=CUDA_DEVICE_ORDER=PCI_BUS_ID
+### Node settings
+### CPU  settings
+### GPU  setting
 ulimit -s unlimited
 dos2unix POSCAR
 module purge

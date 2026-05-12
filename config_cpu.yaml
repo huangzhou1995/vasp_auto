@@ -32,11 +32,14 @@ work_dir: "./"
 # Polling interval for job status checks (seconds)
 poll_interval: 60
 
+# Max wait time before giving up (seconds, 604800 = 7 days)
+max_wait: 604800
+
 # Run mode:
 #   sequential - Submit step 1, wait for it, then step 2, then step 3
 #   chain      - Submit all 3 at once with Slurm dependency chains
 #                (faster queue-wise, less monitoring)
-mode: "chain"
+mode: "sequential"
 
 # ============================================================
 # Input file auto-generation
@@ -104,46 +107,67 @@ steps:
     job_name: "scf"
     dir: "scf"
     incar:
-      NSW: 0                     # Static calculation
-      ICHARG: 2                  # Start from scratch (or read WAVECAR)
+      SYSTEM: sys
+      PREC: Normal
       ENCUT: 400
-      PREC: "Normal"
-      LREAL: "Auto"
-      ISMEAR: 0
-      SIGMA: 0.05
+      IBRION: -1
+      GGA: PE
+      POTIM: 0.5
+      NSW: 0
+      ISIF: 2
       EDIFF: 1.0e-5
-      LWAVE: False
+      EDIFFG: -0.05
+      ALGO: "N"
       LCHARG: True
-      NCORE: 6
+      LAECHG: True
       ISPIN: 2
       ISTART: 0
+      ICHARG: 2
+      ISMEAR: 0
+      SIGMA: 0.05
+      LREAL: A
+      NCORE: 6
       IVDW: 11
-      ALGO: "Normal"
-      LAECHG: True  
-                   # Also write AECCAR for Bader analysis
+      AMIX: 0.2
+      BMIX: 0.0001
+      AMIX_MAG: 0.8
 
   # ---- Non-Self-Consistent DOS ----
   dos:
     enabled: true
     job_name: "dos"
     dir: "dos"
+    kpoints:
+      kpoints_density: 0.02
+      scheme: "G"
     incar:
-      NSW: 0
-      ICHARG: 11                 # Read CHGCAR, non-SCF DOS
-      ISMEAR: -5                 # Tetrahedron method for DOS
-      SIGMA: 0.05
+      SYSTEM: sys
+      PREC: Normal
       ENCUT: 400
-      PREC: "Normal"
-      LREAL: "Auto"
-      LORBIT: 11                 # Atom-projected DOS
-      NEDOS: 2000                # Dense DOS grid
-      LWAVE: False
-      NCORE: 6
+      IBRION: -1
+      GGA: PE
+      POTIM: 0.5
+      NSW: 0
+      ISIF: 2
+      EDIFF: 1.0e-5
+      EDIFFG: -0.05
+      ALGO: "N"
+      LCHARG: True
+      LAECHG: True
+      LORBIT: 11
+      NEDOS: 2000
       ISPIN: 2
-      ISTART: 0
+      ISTART: 1
+      ICHARG: 11
+      ISMEAR: -5
+      SIGMA: 0.05
+      LREAL: A
+      NCORE: 6
       IVDW: 11
-      ALGO: "Normal"
-      LCHARG: False
+      AMIX: 0.2
+      BMIX: 0.0001
+      AMIX_MAG: 0.8
+      KBLOWUP: False
 
 # ============================================================
 # Post-processing with vaspkit

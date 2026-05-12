@@ -8,6 +8,8 @@ from typing import Optional
 
 logger = logging.getLogger(__name__)
 
+SLURM_BIN = '/public/softwares/slurm-24/bin'
+
 # Patterns to detect the VASP execution line in user templates
 _EXEC_PATTERNS = [
     re.compile(r"(mpirun|srun|exec)\s+.*(vasp_std|vasp_gam|vasp_ncl|qvasp)", re.IGNORECASE),
@@ -22,6 +24,7 @@ def _build_sbatch_script(
     job_dir: str,
     slurm_cfg: dict,
     vasp_exec: str,
+    pre_exec_cmds: list[str] | None = None,
 ) -> str:
     """Generate an sbatch script string.
 
@@ -41,11 +44,12 @@ def _build_sbatch_script(
     template_path = slurm_cfg.get("template", "").strip()
     if template_path:
         template_path = os.path.expanduser(template_path)
-        return _build_from_template(job_name, job_dir, template_path, vasp_exec)
-    return _build_minimal(job_name, job_dir, slurm_cfg, vasp_exec)
+        return _build_from_template(job_name, job_dir, template_path, vasp_exec, pre_exec_cmds)
+    return _build_minimal(job_name, job_dir, slurm_cfg, vasp_exec, pre_exec_cmds)
 
 
-def _build_minimal(job_name: str, job_dir: str, slurm_cfg: dict, vasp_exec: str) -> str:
+def _build_minimal(job_name: str, job_dir: str, slurm_cfg: dict, vasp_exec: str,
+                   pre_exec_cmds: list[str] | None = None) -> str:
     """Generate a minimal sbatch script from config params."""
     lines = [
         "#!/bin/bash",
@@ -54,8 +58,8 @@ def _build_minimal(job_name: str, job_dir: str, slurm_cfg: dict, vasp_exec: str)
         f"#SBATCH --nodes={slurm_cfg['nodes']}",
         f"#SBATCH --ntasks-per-node={slurm_cfg['ntasks_per_node']}",
         f"#SBATCH --time={slurm_cfg['time']}",
-        f"#SBATCH --output={job_name}_%j.out",
-        f"#SBATCH --error={job_name}_%j.err",
+        f"#SBATCH --output={job_dir}/{job_name}_%j.out",
+        f"#SBATCH --error={job_dir}/{job_name}_%j.err",
     ]
 
     extra = slurm_cfg.get("extra", "").strip()
@@ -73,6 +77,14 @@ def _build_minimal(job_name: str, job_dir: str, slurm_cfg: dict, vasp_exec: str)
         f"echo 'Job name: {job_name}'",
         "echo 'Hostname: $(hostname)'",
         "",
+    ]
+
+    if pre_exec_cmds:
+        for cmd in pre_exec_cmds:
+            lines.append(cmd)
+        lines.append("")
+
+    lines += [
         f"srun {vasp_exec}",
         "",
     ]
@@ -86,6 +98,7 @@ def _build_from_template(
     job_dir: str,
     template_path: str,
     vasp_exec: str,
+    pre_exec_cmds: list[str] | None = None,
 ) -> str:
     """Build sbatch script from a user-provided template.
 
@@ -121,11 +134,11 @@ def _build_from_template(
             continue
 
         if re.match(r"^#SBATCH\s+--output[=\s]", stripped, re.IGNORECASE):
-            new_lines.append(f"#SBATCH --output={job_name}_%j.out")
+            new_lines.append(f"#SBATCH --output={job_dir}/{job_name}_%j.out")
             continue
 
         if re.match(r"^#SBATCH\s+--error[=\s]", stripped, re.IGNORECASE):
-            new_lines.append(f"#SBATCH --error={job_name}_%j.err")
+            new_lines.append(f"#SBATCH --error={job_dir}/{job_name}_%j.err")
             continue
 
         # --- Detect VASP execution line ---
@@ -157,6 +170,14 @@ def _build_from_template(
         "echo 'Hostname: $(hostname)'",
         "echo 'Working dir: ' $(pwd)",
         "",
+    ]
+
+    if pre_exec_cmds:
+        for cmd in pre_exec_cmds:
+            exec_block.append(cmd)
+        exec_block.append("")
+
+    exec_block += [
         exec_cmd,
         "",
     ]
@@ -186,9 +207,9 @@ def _build_from_template(
         if re.match(r"^#SBATCH\s+--job-name[=\s]", stripped, re.IGNORECASE):
             final_lines.append(f"#SBATCH --job-name={job_name}")
         elif re.match(r"^#SBATCH\s+--output[=\s]", stripped, re.IGNORECASE):
-            final_lines.append(f"#SBATCH --output={job_name}_%j.out")
+            final_lines.append(f"#SBATCH --output={job_dir}/{job_name}_%j.out")
         elif re.match(r"^#SBATCH\s+--error[=\s]", stripped, re.IGNORECASE):
-            final_lines.append(f"#SBATCH --error={job_name}_%j.err")
+            final_lines.append(f"#SBATCH --error={job_dir}/{job_name}_%j.err")
         elif _is_exec_line(stripped):
             # Insert the execution wrapper here
             final_lines.extend(exec_block)
@@ -233,6 +254,7 @@ def submit_job(
     vasp_exec: str,
     dependency_jobid: Optional[str] = None,
     dry_run: bool = False,
+    pre_exec_cmds: list[str] | None = None,
 ) -> Optional[str]:
     """Write sbatch script and submit to Slurm.
 
@@ -243,6 +265,7 @@ def submit_job(
         vasp_exec: VASP executable name.
         dependency_jobid: If set, add --dependency=afterok:<JOBID>.
         dry_run: If True, write script but don't submit.
+        pre_exec_cmds: Commands to inject before VASP execution.
 
     Returns:
         Slurm JOBID string if submitted, None if dry_run.
@@ -250,7 +273,8 @@ def submit_job(
     os.makedirs(job_dir, exist_ok=True)
 
     script_path = os.path.join(job_dir, f"{job_name}.sbatch")
-    script_content = _build_sbatch_script(job_name, job_dir, slurm_cfg, vasp_exec)
+    script_content = _build_sbatch_script(job_name, job_dir, slurm_cfg, vasp_exec,
+                                          pre_exec_cmds=pre_exec_cmds)
 
     with open(script_path, "w") as f:
         f.write(script_content)
@@ -261,7 +285,8 @@ def submit_job(
         logger.info(f"[DRY RUN] sbatch script written: {script_path}")
         return None
 
-    cmd = ["sbatch"]
+    sbatch_bin = os.path.join(SLURM_BIN, "sbatch")
+    cmd = [sbatch_bin]
     if dependency_jobid:
         cmd.append(f"--dependency=afterok:{dependency_jobid}")
 
