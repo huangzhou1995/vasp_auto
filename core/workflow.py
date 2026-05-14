@@ -106,6 +106,29 @@ def _generate_inputs(cfg: dict, work_dir: str):
                       kpoints_density=density, poscar_path=poscar)
 
 
+def _count_kpoints(kpts_path: str) -> int | None:
+    """Parse KPOINTS file and return total number of K-points in mesh.
+
+    Handles both mesh format (Nx Ny Nz) and K-spacing format.
+    Returns None if parsing fails.
+    """
+    try:
+        with open(kpts_path) as f:
+            lines = f.readlines()
+        if len(lines) < 5:
+            return None
+        # Line 4 (0-indexed: 3) is the mesh line
+        parts = lines[3].strip().split()
+        if len(parts) >= 3:
+            kx, ky, kz = int(parts[0]), int(parts[1]), int(parts[2])
+            total = kx * ky * kz
+            return total
+        # K-spacing format: single number, total K-points unknown
+        return None
+    except (OSError, ValueError, IndexError):
+        return None
+
+
 def _prepare_step_directory(step_name: str, step_cfg: dict, work_dir: str,
                             steps_cfg: dict) -> str:
     """Prepare input files for a step directory.
@@ -146,6 +169,16 @@ def _prepare_step_directory(step_name: str, step_cfg: dict, work_dir: str,
                 f.write(f"{scheme_str}\n")
                 f.write(f"{dos_density:.6f}\n")
             logger.info(f"Written fallback KPOINTS for DOS (K-spacing={dos_density}, {scheme_str})")
+
+        # Auto-adjust ISMEAR if total K-points <= 4 (tetrahedron method needs > 4)
+        kpts_path = os.path.join(job_dir, "KPOINTS")
+        total_kpts = _count_kpoints(kpts_path)
+        if total_kpts is not None and total_kpts <= 4:
+            logger.warning(f"Total K-points = {total_kpts} <= 4, forcing ISMEAR=0 instead of -5")
+            step_cfg.setdefault("incar", {})["ISMEAR"] = 0
+        else:
+            dos_ismear = step_cfg.get("incar", {}).get("ISMEAR", -5)
+            logger.info(f"Total K-points = {total_kpts}, keeping ISMEAR={dos_ismear}")
 
         # Copy CHGCAR: try scf dir first, then work_dir
         scf_dir = os.path.join(work_dir, steps_cfg["scf"].get("dir", "scf"))

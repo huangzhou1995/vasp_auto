@@ -60,8 +60,8 @@ steps:
 
   scf:
     enabled: true
-    job_name: "scf"
-    dir: "scf"
+    job_name: "bader"
+    dir: "bader"
     incar:
       SYSTEM: sys
       PREC: Normal
@@ -75,7 +75,7 @@ steps:
       EDIFFG: -0.05
       ALGO: "N"
       LCHARG: True
-      LAECHG: False
+      LAECHG: True
       ISPIN: 2
       ISTART: 0
       ICHARG: 2
