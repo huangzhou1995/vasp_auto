@@ -74,8 +74,7 @@ def _generate_inputs(cfg: dict, work_dir: str):
     # --- POTCAR ---
     potcar_cfg = cfg.get("potcar", {})
     potcar_path = os.path.join(work_dir, "POTCAR")
-    if potcar_cfg.get("auto_generate", True) and not os.path.isfile(potcar_path):
-        logger.info("POTCAR not found, generating via vaspkit ...")
+    if potcar_cfg.get("auto_generate", True):
         if not generate_potcar(work_dir):
             raise RuntimeError("POTCAR generation failed. Check vaspkit and VASP_POT_PATH.")
 

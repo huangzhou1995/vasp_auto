@@ -52,8 +52,8 @@ def generate_potcar(work_dir: str):
 
     potcar = os.path.join(work_dir, "POTCAR")
     if os.path.isfile(potcar):
-        logger.info("POTCAR already exists, skipping generation")
-        return True
+        logger.info("Removing old POTCAR before regeneration ...")
+        os.remove(potcar)
 
     logger.info("Generating POTCAR via vaspkit task 103 ...")
     # Task 103: generate POTCAR, then quit
