@@ -3,7 +3,7 @@
 # ============================================================
 
 slurm:
-  template: ~/software/vasp_auto/sub_vasp_gpu.sh
+  template: ~/software/vasp_auto/sub_vasp_P100.sh
   partition: "compute"
   nodes: 1
   ntasks_per_node: 32
